@@ -11,17 +11,17 @@ pub struct Sprite {
 const INTERNAL_WIDTH: u32 = 320;
 const INTERNAL_HEIGHT: u32 = 150;
 
-async fn load_train(path: &str) -> Sprite {
+async fn load_train(path: &str, start_x: f32, start_y: f32) -> Sprite {
     let texture = load_texture(path).await.expect("Failed to load engine");
 
-    let collider = ColliderBuilder::cuboid(texture.width(), texture.height())
+    let collider = ColliderBuilder::cuboid(texture.width() / 2.0, texture.height() / 2.0)
         .friction(0.5)
         .mass(100.0)
-        .restitution(0.1) // bounciness (0.0 to 1.0)
+        .restitution(0.0) // bounciness (0.0 to 1.0)
         .build();
 
     let body = RigidBodyBuilder::dynamic() 
-        .translation(vector![0.0, -texture.height() * 2.0])
+        .translation(vector![start_x, start_y])
         .build();
 
     Sprite {
@@ -38,14 +38,18 @@ async fn main() {
     let mut collider_set = ColliderSet::new();
 
     /* Create the ground (a static cuboid). */
-    let ground_collider = ColliderBuilder::cuboid(INTERNAL_WIDTH as f32 / 3.0, 1.0) // half-extents
+    let ground_collider = ColliderBuilder::cuboid(INTERNAL_WIDTH as f32 / 4.0, 10.0) // half-extents
         .friction(0.5)
         .build();
     collider_set.insert(ground_collider);
 
-    let engine = load_train("src/engine.png").await;
+    let engine = load_train("src/engine.png", 0.0, -50.0).await;
     let engine_handle = rigid_body_set.insert(engine.body);
     collider_set.insert_with_parent(engine.collider, engine_handle, &mut rigid_body_set);
+
+    let car = load_train("src/car.png", -50.0, -50.0).await;
+    let car_handle = rigid_body_set.insert(car.body);
+    collider_set.insert_with_parent(car.collider, car_handle, &mut rigid_body_set);
 
     /* Create other structures for the physics pipeline. */
     let gravity = vector![0.0, 9.81];
@@ -102,31 +106,47 @@ async fn main() {
             &event_handler,
         );
 
-        let engine_body = &mut rigid_body_set[engine_handle];
 
         set_camera(&camera);
 
+        let mut impulse_vector = vector![0.0, 0.0];
         if is_key_down(KeyCode::Right) {
-            let impulse_vector = vector![100.0, 0.0];
+            impulse_vector.x += 100.0;
+        }
+        if is_key_down(KeyCode::Left) {
+            impulse_vector.x -= 100.0;
+        }
+
+        {
+            let engine_body = rigid_body_set.get_mut(engine_handle).unwrap();
             engine_body.apply_impulse(impulse_vector, true);
         }
 
-        if is_key_down(KeyCode::Left) {
-            let impulse_vector = vector![-100.0, 0.0];
-            engine_body.apply_impulse(impulse_vector, true);
-        }
+        let car_body = &rigid_body_set[car_handle];
+        let engine_body = &rigid_body_set[engine_handle];
 
         let train_y = engine_body.translation().y.round();
         let train_x = engine_body.translation().x.round();
 
         clear_background(BLUE); // Clear screen
 
-        draw_rectangle(INTERNAL_WIDTH as f32 / -3.0, -5.0, INTERNAL_WIDTH as f32 / 1.5, 10.0, RED);
+        draw_rectangle(INTERNAL_WIDTH as f32 / -4.0, 0.0, INTERNAL_WIDTH as f32 / 2.0, 10.0, RED);
 
         emitter.draw(vec2(train_x + 45.0, train_y));
 
-        draw_texture_ex(&
-            engine.texture,
+        draw_texture_ex(
+            &car.texture,
+            car_body.translation().x.round(),
+            car_body.translation().y.round(),
+          WHITE,
+            DrawTextureParams {
+                rotation: car_body.angvel(),
+                ..Default::default()
+            }
+        );
+
+        draw_texture_ex(
+            &engine.texture,
             train_x,
             train_y,
             WHITE,
