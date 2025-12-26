@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 macroquad = "0.4"
+rapier2d = "0.31.0"
