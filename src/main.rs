@@ -2,39 +2,53 @@ use macroquad::prelude::*;
 use rapier2d::prelude::*;
 use macroquad_particles::{Emitter, EmitterConfig};
 
-struct Train {
-    engine: Texture2D,
-    car: Texture2D,
-    x: f32,
-    y: f32,
+pub struct Sprite {
+    texture: Texture2D,
+    body: RigidBody,
+    collider: Collider,
 }
 
 const INTERNAL_WIDTH: u32 = 320;
 const INTERNAL_HEIGHT: u32 = 150;
 
+async fn load_train(path: &str) -> Sprite {
+    let texture = load_texture(path).await.expect("Failed to load engine");
+
+    let collider = ColliderBuilder::cuboid(texture.width(), texture.height())
+        .friction(0.5)
+        .mass(100.0)
+        .restitution(0.1) // bounciness (0.0 to 1.0)
+        .build();
+
+    let body = RigidBodyBuilder::dynamic() 
+        .translation(vector![0.0, -texture.height() * 2.0])
+        .build();
+
+    Sprite {
+        body: body,
+        collider: collider,
+        texture: texture
+    }
+}
+
 #[macroquad::main("Simple Sprite Example")]
 async fn main() {    
+
     let mut rigid_body_set = RigidBodySet::new();
     let mut collider_set = ColliderSet::new();
 
     /* Create the ground (a static cuboid). */
-    let ground_collider = ColliderBuilder::cuboid(10.0, 0.1) // half-extents
-        .friction(0.8)
+    let ground_collider = ColliderBuilder::cuboid(INTERNAL_WIDTH as f32 / 3.0, 1.0) // half-extents
+        .friction(0.5)
         .build();
     collider_set.insert(ground_collider);
 
-    /* Create a bouncing ball (a dynamic rigid body with a ball collider). */
-    let ball_body = RigidBodyBuilder::dynamic() // makes the body dynamic (simulated by physics)
-        .translation(vector![0.0, 10.0]) // initial position
-        .build();
-    let ball_collider = ColliderBuilder::ball(0.5) // radius
-        .restitution(0.7) // bounciness (0.0 to 1.0)
-        .build();
-    let ball_body_handle = rigid_body_set.insert(ball_body);
-    collider_set.insert_with_parent(ball_collider, ball_body_handle, &mut rigid_body_set);
+    let engine = load_train("src/engine.png").await;
+    let engine_handle = rigid_body_set.insert(engine.body);
+    collider_set.insert_with_parent(engine.collider, engine_handle, &mut rigid_body_set);
 
     /* Create other structures for the physics pipeline. */
-    let gravity = vector![0.0, -9.81];
+    let gravity = vector![0.0, 9.81];
     let mut physics_pipeline = PhysicsPipeline::new();
     let integration_parameters = IntegrationParameters::default();
     let mut island_manager = IslandManager::new();
@@ -59,11 +73,7 @@ async fn main() {
         ..Default::default()
     };
 
-    let engine = load_texture("src/engine.png").await.expect("Failed to load engine");
-    let car = load_texture("src/car.png").await.expect("Failed to load car");
     let particle_texture = load_texture("src/steam.png").await.expect("Failed to load particle texture");
-
-    let mut train = Train { engine, car, x: 0.0, y: 0.0};
 
     let mut emitter = Emitter::new(EmitterConfig {
         emitting: true,
@@ -92,41 +102,47 @@ async fn main() {
             &event_handler,
         );
 
-        // Get and print the ball's position
-        let ball_body = &mut rigid_body_set[ball_body_handle];
+        let engine_body = &mut rigid_body_set[engine_handle];
 
         set_camera(&camera);
 
         if is_key_down(KeyCode::Right) {
-            let impulse_vector = vector![-0.1, 0.0];
-            ball_body.apply_impulse(impulse_vector, true);
+            let impulse_vector = vector![100.0, 0.0];
+            engine_body.apply_impulse(impulse_vector, true);
         }
 
         if is_key_down(KeyCode::Left) {
-            let impulse_vector = vector![0.1, 0.0];
-            ball_body.apply_impulse(impulse_vector, true);
+            let impulse_vector = vector![-100.0, 0.0];
+            engine_body.apply_impulse(impulse_vector, true);
         }
 
-
-        train.y = (-ball_body.translation().y * 10.0).round();
-        train.x = (-ball_body.translation().x * 10.0).round();
+        let train_y = engine_body.translation().y.round();
+        let train_x = engine_body.translation().x.round();
 
         clear_background(BLUE); // Clear screen
 
-        emitter.draw(vec2(train.x + 45.0, train.y));
+        draw_rectangle(INTERNAL_WIDTH as f32 / -3.0, -5.0, INTERNAL_WIDTH as f32 / 1.5, 10.0, RED);
 
-        draw_texture(&train.engine, train.x, train.y, WHITE);
-        for i in 0..3 {
-            draw_texture(&train.car, train.x - 50.0 - 55.0*(i as f32), train.y, WHITE);
-        }
+        emitter.draw(vec2(train_x + 45.0, train_y));
 
-        let wheel_phase = ball_body.translation().x as f32 * get_time() as f32 / 3.0;
+        draw_texture_ex(&
+            engine.texture,
+            train_x,
+            train_y,
+            WHITE,
+            DrawTextureParams {
+                rotation: engine_body.angvel(),
+                ..Default::default()
+            }
+        );
+
+        let wheel_phase = -engine_body.translation().x as f32;
 
         draw_line(
-            train.x + 20.0 + (wheel_phase).sin() * 3.0,
-            train.y + 25.0 + (wheel_phase).cos() * 3.0,
-            train.x + 40.0,
-            train.y + 25.0,
+            train_x + 20.0 + (wheel_phase).sin() * 3.0,
+            train_y + 25.0 + (wheel_phase).cos() * 3.0,
+            train_x + 40.0,
+            train_y + 25.0,
             1.0,
             Color::from_hex(0x896e2f),
         );
