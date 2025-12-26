@@ -2,7 +2,8 @@ use macroquad::prelude::*;
 use rapier2d::prelude::*;
 
 struct Train {
-    texture: Texture2D,
+    engine: Texture2D,
+    car: Texture2D,
     x: f32,
     y: f32,
 }
@@ -57,9 +58,10 @@ async fn main() {
         ..Default::default()
     };
 
-    let texture = load_texture("src/engine.png").await.expect("Failed to load texture");
+    let engine = load_texture("src/engine.png").await.expect("Failed to load engine");
+    let car = load_texture("src/car.png").await.expect("Failed to load car");
 
-    let mut train = Train { texture, x: 0.0, y: 0.0};
+    let mut train = Train { engine, car, x: 0.0, y: 0.0};
 
 
     loop {
@@ -99,8 +101,10 @@ async fn main() {
 
         clear_background(BLUE); // Clear screen
 
-        draw_texture(&train.texture, train.x, train.y, WHITE);
-        draw_texture(&train.texture, train.x, train.y, WHITE);
+        draw_texture(&train.engine, train.x, train.y, WHITE);
+        for i in 0..3 {
+            draw_texture(&train.car, train.x - 50.0 - 55.0*(i as f32), train.y, WHITE);
+        }
 
         let wheel_phase = ball_body.translation().x as f32 * get_time() as f32 / 3.0;
 
