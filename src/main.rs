@@ -1,5 +1,6 @@
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
+use macroquad_particles::{Emitter, EmitterConfig};
 
 struct Train {
     engine: Texture2D,
@@ -60,9 +61,20 @@ async fn main() {
 
     let engine = load_texture("src/engine.png").await.expect("Failed to load engine");
     let car = load_texture("src/car.png").await.expect("Failed to load car");
+    let particle_texture = load_texture("src/steam.png").await.expect("Failed to load particle texture");
 
     let mut train = Train { engine, car, x: 0.0, y: 0.0};
 
+    let mut emitter = Emitter::new(EmitterConfig {
+        emitting: true,
+        one_shot: false,
+        lifetime: 2.0,
+        initial_velocity: 30.0,
+        initial_velocity_randomness: 0.8,
+        initial_direction_spread: 0.8,
+        texture: Some(particle_texture),
+        ..Default::default()
+    });
 
     loop {
         physics_pipeline.step(
@@ -100,6 +112,8 @@ async fn main() {
         train.x = (-ball_body.translation().x * 10.0).round();
 
         clear_background(BLUE); // Clear screen
+
+        emitter.draw(vec2(train.x + 45.0, train.y));
 
         draw_texture(&train.engine, train.x, train.y, WHITE);
         for i in 0..3 {
