@@ -11,6 +11,8 @@ const INTERNAL_HEIGHT: u32 = 150;
 
 #[macroquad::main("Simple Sprite Example")]
 async fn main() {
+    let font = load_ttf_font_from_bytes(include_bytes!("Pixel-Western.ttf")).unwrap();
+    
     let render_target = render_target(INTERNAL_WIDTH, INTERNAL_HEIGHT);
     render_target.texture.set_filter(FilterMode::Nearest);
 
@@ -64,6 +66,18 @@ async fn main() {
             WHITE,
             DrawTextureParams {
                 dest_size: Some(vec2(screen_width(), screen_height())),
+                ..Default::default()
+            },
+        );
+
+        draw_text_ex(
+            "Choo Choo <3",
+            0.0,
+            60.0,
+            TextParams {
+                font: Some(&font),
+                font_size: 30,
+                color: Color::from_hex(0x896e2f),
                 ..Default::default()
             },
         );
