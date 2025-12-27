@@ -1,6 +1,7 @@
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
 use macroquad_particles::{Emitter, EmitterConfig};
+use std::iter::repeat_with;
 
 pub struct Sprite {
     texture: Texture2D,
@@ -11,6 +12,34 @@ pub struct Engine {
     sprite: Sprite,
     smoke: Emitter,
 }
+
+pub struct Grass {
+    x: f32,
+    y: f32,
+    stiff: f32,
+    height: f32,
+    color: Color,
+}
+
+impl Grass {
+    fn rand() -> Self {
+        let mut color = YELLOW;
+        color.g = 0.7 + fastrand::f32() * 0.3;
+        Grass {
+            x: fastrand::i32(0..INTERNAL_WIDTH as i32) as f32,
+            y: fastrand::i32(0..INTERNAL_HEIGHT as i32) as f32,
+            height: fastrand::i32(3..10) as f32,
+            stiff: fastrand::f32(),
+            color: color,
+        }
+    }
+
+    fn draw(&self) {
+        let xoff: f32 = (get_time() as f32 + self.x).sin() * (1.0-self.stiff)*3.0;
+        draw_line(self.x, self.y, self.x + xoff, self.y - self.height, 2.0, self.color);
+    }
+}
+
 
 const INTERNAL_WIDTH: u32 = 320;
 const INTERNAL_HEIGHT: u32 = 150;
@@ -88,14 +117,19 @@ async fn main() {
     let mut rigid_body_set = RigidBodySet::new();
     let mut collider_set = ColliderSet::new();
 
-    let ground_collider = ColliderBuilder::cuboid(INTERNAL_WIDTH as f32 / 4.0, 10.0) // half-extents
+    let grass: Vec<Grass> = repeat_with(|| Grass::rand())
+        .take(1500)
+        .collect();
+
+    let ground_collider = ColliderBuilder::cuboid(INTERNAL_WIDTH as f32 / 2.0, 10.0) // half-extents
         .friction(0.5)
+        .translation(vector![INTERNAL_WIDTH as f32 / 2.0, INTERNAL_HEIGHT as f32 / 2.0])
         .build();
     collider_set.insert(ground_collider);
 
     let engine_sprite = Sprite::load(
         "src/engine.png",
-        vec2(0.0, -50.0),
+        vec2(150.0, 50.0),
         &mut rigid_body_set,
         &mut collider_set,
     ).await;
@@ -120,7 +154,7 @@ async fn main() {
 
     let car = Sprite::load(
         "src/car.png",
-        vec2(-50.0, -50.0),
+        vec2(90.0, 30.0),
         &mut rigid_body_set,
         &mut collider_set,
     ).await;
@@ -145,7 +179,7 @@ async fn main() {
     let camera = Camera2D {
         render_target: Some(render_target.clone()),
         zoom: vec2(1.0 / INTERNAL_WIDTH as f32 * 2.0, 1.0 / INTERNAL_HEIGHT as f32 * 2.0),
-        target: vec2(0.0, 0.0),
+        target: vec2(INTERNAL_WIDTH as f32 / 2.0, INTERNAL_HEIGHT as f32 / 2.0),
         ..Default::default()
     };
 
@@ -183,8 +217,14 @@ async fn main() {
         }
 
 
-        clear_background(BLUE);
+        clear_background(Color::from_hex(0x896e2f));
         draw_rectangle(INTERNAL_WIDTH as f32 / -4.0, 0.0, INTERNAL_WIDTH as f32 / 2.0, 10.0, RED);
+
+        for blade in &grass {
+            if blade.y <= (INTERNAL_HEIGHT / 2) as f32 {
+                blade.draw()
+            }
+        }
 
         {
             let engine_body = &rigid_body_set[engine.sprite.handle];
@@ -192,6 +232,12 @@ async fn main() {
 
             let car_body = &rigid_body_set[car.handle];
             draw_car(&car, car_body);
+        }
+
+        for blade in &grass {
+            if blade.y > (INTERNAL_HEIGHT / 2) as f32 {
+                blade.draw()
+            }
         }
 
 
