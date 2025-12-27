@@ -4,31 +4,82 @@ use macroquad_particles::{Emitter, EmitterConfig};
 
 pub struct Sprite {
     texture: Texture2D,
-    body: RigidBody,
-    collider: Collider,
+    handle: RigidBodyHandle,
+}
+
+pub struct Engine {
+    sprite: Sprite,
+    smoke: Emitter,
 }
 
 const INTERNAL_WIDTH: u32 = 320;
 const INTERNAL_HEIGHT: u32 = 150;
 
-async fn load_train(path: &str, start_x: f32, start_y: f32) -> Sprite {
-    let texture = load_texture(path).await.expect("Failed to load engine");
+impl Sprite {
+    async fn load(path: &str, position: Vec2, rigid_body_set: &mut RigidBodySet, collider_set: &mut ColliderSet) -> Sprite {
+        let texture = load_texture(path).await.expect("Failed to load texture");
 
-    let collider = ColliderBuilder::cuboid(texture.width() / 2.0, texture.height() / 2.0)
-        .friction(0.5)
-        .mass(100.0)
-        .restitution(0.0) // bounciness (0.0 to 1.0)
-        .build();
+        let collider = ColliderBuilder::cuboid(texture.width() / 2.0, texture.height() / 2.0)
+            .friction(0.5)
+            .mass(100.0)
+            .restitution(0.0)
+            .build();
 
-    let body = RigidBodyBuilder::dynamic() 
-        .translation(vector![start_x, start_y])
-        .build();
+        let body = RigidBodyBuilder::dynamic() 
+            .translation(vector![position.x, position.y])
+            .build();
 
-    Sprite {
-        body: body,
-        collider: collider,
-        texture: texture
+        let handle = rigid_body_set.insert(body);
+
+        collider_set.insert_with_parent(collider, handle, rigid_body_set);
+
+        Sprite {
+            handle: handle,
+            texture: texture
+        }
     }
+}
+
+fn draw_engine(engine: &mut Engine, body: &RigidBody) {
+    let train_y = body.translation().y.round();
+    let train_x = body.translation().x.round();
+
+    engine.smoke.draw(vec2(train_x + 45.0, train_y));
+
+    draw_texture_ex(
+        &engine.sprite.texture,
+        train_x,
+        train_y,
+        WHITE,
+        DrawTextureParams {
+            rotation: body.angvel(),
+            ..Default::default()
+        }
+    );
+
+    let wheel_phase = -body.translation().x as f32;
+
+    draw_line(
+        train_x + 20.0 + (wheel_phase).sin() * 3.0,
+        train_y + 25.0 + (wheel_phase).cos() * 3.0,
+        train_x + 40.0,
+        train_y + 25.0,
+        1.0,
+        Color::from_hex(0x896e2f),
+    );
+}
+
+fn draw_car(car: &Sprite, body: &RigidBody) {
+    draw_texture_ex(
+        &car.texture,
+        body.translation().x.round(),
+        body.translation().y.round(),
+        WHITE,
+        DrawTextureParams {
+            rotation: body.angvel(),
+            ..Default::default()
+        }
+    );
 }
 
 #[macroquad::main("Simple Sprite Example")]
@@ -37,21 +88,43 @@ async fn main() {
     let mut rigid_body_set = RigidBodySet::new();
     let mut collider_set = ColliderSet::new();
 
-    /* Create the ground (a static cuboid). */
     let ground_collider = ColliderBuilder::cuboid(INTERNAL_WIDTH as f32 / 4.0, 10.0) // half-extents
         .friction(0.5)
         .build();
     collider_set.insert(ground_collider);
 
-    let engine = load_train("src/engine.png", 0.0, -50.0).await;
-    let engine_handle = rigid_body_set.insert(engine.body);
-    collider_set.insert_with_parent(engine.collider, engine_handle, &mut rigid_body_set);
+    let engine_sprite = Sprite::load(
+        "src/engine.png",
+        vec2(0.0, -50.0),
+        &mut rigid_body_set,
+        &mut collider_set,
+    ).await;
 
-    let car = load_train("src/car.png", -50.0, -50.0).await;
-    let car_handle = rigid_body_set.insert(car.body);
-    collider_set.insert_with_parent(car.collider, car_handle, &mut rigid_body_set);
+    let smoke_texture = load_texture("src/steam.png").await.expect("Failed to load particle texture");
 
-    /* Create other structures for the physics pipeline. */
+    let smoke_emitter = Emitter::new(EmitterConfig {
+        emitting: true,
+        one_shot: false,
+        lifetime: 2.0,
+        initial_velocity: 30.0,
+        initial_velocity_randomness: 0.8,
+        initial_direction_spread: 0.8,
+        texture: Some(smoke_texture),
+        ..Default::default()
+    });
+
+    let mut engine = Engine {
+        sprite: engine_sprite,
+        smoke: smoke_emitter,
+    };
+
+    let car = Sprite::load(
+        "src/car.png",
+        vec2(-50.0, -50.0),
+        &mut rigid_body_set,
+        &mut collider_set,
+    ).await;
+
     let gravity = vector![0.0, 9.81];
     let mut physics_pipeline = PhysicsPipeline::new();
     let integration_parameters = IntegrationParameters::default();
@@ -71,24 +144,11 @@ async fn main() {
 
     let camera = Camera2D {
         render_target: Some(render_target.clone()),
-        // Adjust the zoom to match your desired camera behavior within the low-res space
         zoom: vec2(1.0 / INTERNAL_WIDTH as f32 * 2.0, 1.0 / INTERNAL_HEIGHT as f32 * 2.0),
-        target: vec2(0.0, 0.0), // Center the camera if needed
+        target: vec2(0.0, 0.0),
         ..Default::default()
     };
 
-    let particle_texture = load_texture("src/steam.png").await.expect("Failed to load particle texture");
-
-    let mut emitter = Emitter::new(EmitterConfig {
-        emitting: true,
-        one_shot: false,
-        lifetime: 2.0,
-        initial_velocity: 30.0,
-        initial_velocity_randomness: 0.8,
-        initial_direction_spread: 0.8,
-        texture: Some(particle_texture),
-        ..Default::default()
-    });
 
     loop {
         physics_pipeline.step(
@@ -118,59 +178,25 @@ async fn main() {
         }
 
         {
-            let engine_body = rigid_body_set.get_mut(engine_handle).unwrap();
+            let engine_body = rigid_body_set.get_mut(engine.sprite.handle).unwrap();
             engine_body.apply_impulse(impulse_vector, true);
         }
 
-        let car_body = &rigid_body_set[car_handle];
-        let engine_body = &rigid_body_set[engine_handle];
 
-        let train_y = engine_body.translation().y.round();
-        let train_x = engine_body.translation().x.round();
-
-        clear_background(BLUE); // Clear screen
-
+        clear_background(BLUE);
         draw_rectangle(INTERNAL_WIDTH as f32 / -4.0, 0.0, INTERNAL_WIDTH as f32 / 2.0, 10.0, RED);
 
-        emitter.draw(vec2(train_x + 45.0, train_y));
+        {
+            let engine_body = &rigid_body_set[engine.sprite.handle];
+            draw_engine(&mut engine, engine_body);
 
-        draw_texture_ex(
-            &car.texture,
-            car_body.translation().x.round(),
-            car_body.translation().y.round(),
-          WHITE,
-            DrawTextureParams {
-                rotation: car_body.angvel(),
-                ..Default::default()
-            }
-        );
+            let car_body = &rigid_body_set[car.handle];
+            draw_car(&car, car_body);
+        }
 
-        draw_texture_ex(
-            &engine.texture,
-            train_x,
-            train_y,
-            WHITE,
-            DrawTextureParams {
-                rotation: engine_body.angvel(),
-                ..Default::default()
-            }
-        );
 
-        let wheel_phase = -engine_body.translation().x as f32;
-
-        draw_line(
-            train_x + 20.0 + (wheel_phase).sin() * 3.0,
-            train_y + 25.0 + (wheel_phase).cos() * 3.0,
-            train_x + 40.0,
-            train_y + 25.0,
-            1.0,
-            Color::from_hex(0x896e2f),
-        );
-
-        // Switch back to the default camera (draws to the full screen)
         set_default_camera();
         
-        // Clear the actual screen
         clear_background(BLUE);
 
         // Draw the low-resolution render target texture onto the full screen, scaled up.
