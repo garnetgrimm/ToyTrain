@@ -178,7 +178,7 @@ async fn main() {
     let render_target = render_target(INTERNAL_WIDTH, INTERNAL_HEIGHT);
     render_target.texture.set_filter(FilterMode::Nearest);
 
-    let camera = Camera2D {
+    let mut camera = Camera2D {
         render_target: Some(render_target.clone()),
         zoom: vec2(1.0 / INTERNAL_WIDTH as f32 * 2.0, 1.0 / INTERNAL_HEIGHT as f32 * 2.0),
         target: vec2(INTERNAL_WIDTH as f32 / 2.0, INTERNAL_HEIGHT as f32 / 2.0),
@@ -224,6 +224,8 @@ async fn main() {
 
         let engine_body = &rigid_body_set[engine.sprite.handle];
         let car_body = &rigid_body_set[car.handle];
+
+        camera.target.x = engine_body.translation().x.round();
 
         let blade_thresh = engine_body.translation().y as f32 + 37.0;
 
