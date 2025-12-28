@@ -226,7 +226,21 @@ async fn main() {
 
         clear_background(Color::from_hex(0x896e2f));
 
+
         let engine_body = &rigid_body_set[engine.sprite.handle];
+        let num_sky_shades: i32 = 5;
+        for i in 0..num_sky_shades {
+            let mut color = Color::from_hex(0x27c1e9);
+            let perc = i as f32 / num_sky_shades as f32;
+            color.r += perc;
+            draw_rectangle(
+                engine_body.translation().x - INTERNAL_WIDTH as f32 / 2.0,
+                perc * 47.0,
+                INTERNAL_WIDTH as f32,
+                20.0,
+                color,
+            );
+        }
 
         for blade in &mut grass {
             if blade.x + INTERNAL_WIDTH as f32 / 2.0 < engine_body.translation().x {
