@@ -118,7 +118,7 @@ async fn main() {
     let mut collider_set = ColliderSet::new();
 
     let grass: Vec<Grass> = repeat_with(|| Grass::rand())
-        .take(1500)
+        .take(3000)
         .collect();
 
     let ground_collider = ColliderBuilder::cuboid(INTERNAL_WIDTH as f32 / 2.0, 10.0) // half-extents
@@ -135,6 +135,8 @@ async fn main() {
     ).await;
 
     let smoke_texture = load_texture("src/steam.png").await.expect("Failed to load particle texture");
+
+    let track_texture = load_texture("src/tracks.png").await.expect("Failed to load track texture");
 
     let smoke_emitter = Emitter::new(EmitterConfig {
         emitting: true,
@@ -214,32 +216,35 @@ async fn main() {
         {
             let engine_body = rigid_body_set.get_mut(engine.sprite.handle).unwrap();
             engine_body.apply_impulse(impulse_vector, true);
+            engine.smoke.config.amount = engine_body.linvel().x.abs() as u32 / 5;
         }
 
 
         clear_background(Color::from_hex(0x896e2f));
-        draw_rectangle(INTERNAL_WIDTH as f32 / -4.0, 0.0, INTERNAL_WIDTH as f32 / 2.0, 10.0, RED);
+
+        let engine_body = &rigid_body_set[engine.sprite.handle];
+        let car_body = &rigid_body_set[car.handle];
+
+        let blade_thresh = engine_body.translation().y as f32 + 37.0;
 
         for blade in &grass {
-            if blade.y <= (INTERNAL_HEIGHT / 2) as f32 {
+            if 50.0 <= blade.y && blade.y <= blade_thresh {
                 blade.draw()
             }
         }
 
-        {
-            let engine_body = &rigid_body_set[engine.sprite.handle];
-            draw_engine(&mut engine, engine_body);
-
-            let car_body = &rigid_body_set[car.handle];
-            draw_car(&car, car_body);
+        for i in 0..10 {
+            draw_texture(&track_texture, (i*32) as f32, INTERNAL_HEIGHT as f32 / 2.0 - track_texture.height() / 2.0, WHITE);
         }
 
+        draw_engine(&mut engine, engine_body);
+        draw_car(&car, car_body);
+
         for blade in &grass {
-            if blade.y > (INTERNAL_HEIGHT / 2) as f32 {
+            if blade.y > blade_thresh && blade.y < (2.0*blade_thresh - 50.0) {
                 blade.draw()
             }
         }
-
 
         set_default_camera();
         
@@ -259,13 +264,14 @@ async fn main() {
         );
 
         draw_text_ex(
-            format!("Choo Choo <3").as_str(),
-            0.0,
-            60.0,
+            "< Choo Choo <",
+            230.0,
+            75.0,
             TextParams {
+                font_scale: 1.0 + (get_time() * 10.0).sin() as f32 * (0.001*engine_body.linvel().x.abs()),
                 font: Some(&font),
                 font_size: 30,
-                color: Color::from_hex(0x896e2f),
+                color: BLACK,
                 ..Default::default()
             },
         );
