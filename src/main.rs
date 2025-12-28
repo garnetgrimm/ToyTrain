@@ -81,7 +81,7 @@ fn draw_engine(engine: &mut Engine, body: &RigidBody) {
         train_y,
         WHITE,
         DrawTextureParams {
-            rotation: body.angvel(),
+            rotation: body.rotation().angle(),
             ..Default::default()
         }
     );
@@ -227,7 +227,7 @@ async fn main() {
 
         camera.target.x = engine_body.translation().x.round();
 
-        let blade_thresh = engine_body.translation().y as f32 + 37.0;
+        let blade_thresh = INTERNAL_HEIGHT as f32 / 2.0 + 10.0;
 
         for blade in &grass {
             if 50.0 <= blade.y && blade.y <= blade_thresh {
