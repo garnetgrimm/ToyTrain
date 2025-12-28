@@ -89,9 +89,9 @@ fn draw_engine(engine: &mut Engine, body: &RigidBody) {
     let wheel_phase = -body.translation().x as f32;
 
     draw_line(
-        train_x + 20.0 + (wheel_phase).sin() * 3.0,
+        train_x + 15.0 + (wheel_phase).sin() * 3.0,
         train_y + 25.0 + (wheel_phase).cos() * 3.0,
-        train_x + 40.0,
+        train_x + 35.0,
         train_y + 25.0,
         1.0,
         Color::from_hex(0x896e2f),
@@ -129,7 +129,7 @@ async fn main() {
 
     let engine_sprite = Sprite::load(
         "src/engine.png",
-        vec2(150.0, 50.0),
+        vec2(300.0, 30.0),
         &mut rigid_body_set,
         &mut collider_set,
     ).await;
@@ -154,12 +154,16 @@ async fn main() {
         smoke: smoke_emitter,
     };
 
-    let car = Sprite::load(
-        "src/car.png",
-        vec2(90.0, 30.0),
-        &mut rigid_body_set,
-        &mut collider_set,
-    ).await;
+    let mut cars = Vec::<Sprite>::new();
+
+    for i in 0..3 {
+        cars.push(Sprite::load(
+            "src/car.png",
+            vec2(90.0 + i as f32 * 70.0, 30.0),
+            &mut rigid_body_set,
+            &mut collider_set,
+        ).await);
+    }
 
     let gravity = vector![0.0, 9.81];
     let mut physics_pipeline = PhysicsPipeline::new();
@@ -223,7 +227,6 @@ async fn main() {
         clear_background(Color::from_hex(0x896e2f));
 
         let engine_body = &rigid_body_set[engine.sprite.handle];
-        let car_body = &rigid_body_set[car.handle];
 
         for blade in &mut grass {
             if blade.x + INTERNAL_WIDTH as f32 / 2.0 < engine_body.translation().x {
@@ -249,7 +252,10 @@ async fn main() {
         }
 
         draw_engine(&mut engine, engine_body);
-        draw_car(&car, car_body);
+
+        for car in &cars {
+            draw_car(&car, &rigid_body_set[car.handle]);
+        }
 
         for blade in &grass {
             if blade.y > blade_thresh && blade.y < (2.0*blade_thresh - 50.0) {
