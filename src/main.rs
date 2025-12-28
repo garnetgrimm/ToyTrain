@@ -117,7 +117,7 @@ async fn main() {
     let mut rigid_body_set = RigidBodySet::new();
     let mut collider_set = ColliderSet::new();
 
-    let grass: Vec<Grass> = repeat_with(|| Grass::rand())
+    let mut grass: Vec<Grass> = repeat_with(|| Grass::rand())
         .take(3000)
         .collect();
 
@@ -224,6 +224,15 @@ async fn main() {
 
         let engine_body = &rigid_body_set[engine.sprite.handle];
         let car_body = &rigid_body_set[car.handle];
+
+        for blade in &mut grass {
+            if blade.x + INTERNAL_WIDTH as f32 / 2.0 < engine_body.translation().x {
+                blade.x += INTERNAL_WIDTH as f32;
+            }
+            if blade.x - INTERNAL_WIDTH as f32 / 2.0 > engine_body.translation().x {
+                blade.x -= INTERNAL_WIDTH as f32;
+            }
+        }
 
         camera.target.x = engine_body.translation().x.round();
 
