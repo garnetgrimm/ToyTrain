@@ -2,6 +2,7 @@ use macroquad::prelude::*;
 use rapier2d::prelude::*;
 use macroquad_particles::{Emitter, EmitterConfig};
 use std::iter::repeat_with;
+use macroquad::experimental::animation::*;
 
 pub struct Sprite {
     texture: Texture2D,
@@ -41,8 +42,8 @@ impl Grass {
 }
 
 
-const INTERNAL_WIDTH: u32 = 320;
-const INTERNAL_HEIGHT: u32 = 150;
+const INTERNAL_WIDTH: u32 = 160;
+const INTERNAL_HEIGHT: u32 = 75;
 
 impl Sprite {
     async fn load(path: &str, position: Vec2, rigid_body_set: &mut RigidBodySet, collider_set: &mut ColliderSet) -> Sprite {
@@ -117,19 +118,52 @@ async fn main() {
     let mut rigid_body_set = RigidBodySet::new();
     let mut collider_set = ColliderSet::new();
 
+    let mut cat_tail_anim = AnimatedSprite::new(
+        8,
+        8,
+        &[
+            Animation {
+                name: "idle".to_string(),
+                row: 0,
+                frames: 8,
+                fps: 4,
+            },
+        ],
+        true,
+    );
+
+    let mut cat_feet_anim = AnimatedSprite::new(
+        16,
+        4,
+        &[
+            Animation {
+                name: "walk".to_string(),
+                row: 0,
+                frames: 7,
+                fps: 8,
+            },
+        ],
+        true,
+    );
+
+    let cat_tail_img = load_texture("src/cat_tail.png").await.unwrap();
+    let cat_body_img = load_texture("src/cat_body.png").await.unwrap();
+    let cat_feet_img = load_texture("src/cat_feet.png").await.unwrap();
+
     let mut grass: Vec<Grass> = repeat_with(|| Grass::rand())
-        .take(3000)
+        .take(7000)
         .collect();
 
-    let ground_collider = ColliderBuilder::cuboid(INTERNAL_WIDTH as f32 / 2.0, 10.0) // half-extents
+    let ground_collider = ColliderBuilder::cuboid(100.0, 10.0) // half-extents
         .friction(0.5)
-        .translation(vector![INTERNAL_WIDTH as f32 / 2.0, INTERNAL_HEIGHT as f32 / 2.0])
+        .translation(vector![0.0, 0.0])
         .build();
+    ground_collider.translation().x;
     collider_set.insert(ground_collider);
 
     let engine_sprite = Sprite::load(
         "src/engine.png",
-        vec2(300.0, 30.0),
+        vec2(0.0, -20.0),
         &mut rigid_body_set,
         &mut collider_set,
     ).await;
@@ -226,7 +260,6 @@ async fn main() {
 
         clear_background(Color::from_hex(0x896e2f));
 
-
         let engine_body = &rigid_body_set[engine.sprite.handle];
         let num_sky_shades: i32 = 5;
         for i in 0..num_sky_shades {
@@ -235,7 +268,7 @@ async fn main() {
             color.r += perc;
             draw_rectangle(
                 engine_body.translation().x - INTERNAL_WIDTH as f32 / 2.0,
-                perc * 47.0,
+                0.0 - perc * (INTERNAL_HEIGHT as f32),
                 INTERNAL_WIDTH as f32,
                 20.0,
                 color,
@@ -252,6 +285,7 @@ async fn main() {
         }
 
         camera.target.x = engine_body.translation().x.round();
+        camera.target.y = engine_body.translation().y.round();
 
         let blade_thresh = INTERNAL_HEIGHT as f32 / 2.0 + 10.0;
 
@@ -262,7 +296,7 @@ async fn main() {
         }
 
         for i in 0..10 {
-            draw_texture(&track_texture, (i*32) as f32, INTERNAL_HEIGHT as f32 / 2.0 - track_texture.height() / 2.0, WHITE);
+            draw_texture(&track_texture, (i*32) as f32, 0.0, WHITE);
         }
 
         draw_engine(&mut engine, engine_body);
@@ -276,6 +310,41 @@ async fn main() {
                 blade.draw()
             }
         }
+
+        draw_texture(
+            &cat_body_img,
+            engine_body.translation().x,
+            engine_body.translation().y,
+            WHITE,
+        );
+
+        draw_texture_ex(
+            &cat_tail_img,
+            engine_body.translation().x,
+            engine_body.translation().y + 1.0,
+            WHITE,
+            DrawTextureParams {
+                source: Some(cat_tail_anim.frame().source_rect),
+                dest_size: Some(cat_tail_anim.frame().dest_size),
+                ..Default::default()
+            }
+        );
+
+        draw_texture_ex(
+            &cat_feet_img,
+            engine_body.translation().x,
+            engine_body.translation().y + 11.0,
+            WHITE,
+            DrawTextureParams {
+                source: Some(cat_feet_anim.frame().source_rect),
+                dest_size: Some(cat_feet_anim.frame().dest_size),
+                ..Default::default()
+            }
+        );
+
+        // Update frame
+        cat_tail_anim.update();
+        cat_feet_anim.update();
 
         set_default_camera();
         
