@@ -2,7 +2,8 @@ use macroquad::prelude::*;
 use rapier2d::prelude::*;
 use macroquad_particles::{Emitter, EmitterConfig};
 use std::iter::repeat_with;
-use macroquad::experimental::animation::*;
+mod cat;
+use cat::Cat;
 
 pub struct Sprite {
     texture: Texture2D,
@@ -118,37 +119,8 @@ async fn main() {
     let mut rigid_body_set = RigidBodySet::new();
     let mut collider_set = ColliderSet::new();
 
-    let mut cat_tail_anim = AnimatedSprite::new(
-        8,
-        8,
-        &[
-            Animation {
-                name: "idle".to_string(),
-                row: 0,
-                frames: 8,
-                fps: 4,
-            },
-        ],
-        true,
-    );
 
-    let mut cat_feet_anim = AnimatedSprite::new(
-        16,
-        4,
-        &[
-            Animation {
-                name: "walk".to_string(),
-                row: 0,
-                frames: 7,
-                fps: 8,
-            },
-        ],
-        true,
-    );
-
-    let cat_tail_img = load_texture("src/cat_tail.png").await.unwrap();
-    let cat_body_img = load_texture("src/cat_body.png").await.unwrap();
-    let cat_feet_img = load_texture("src/cat_feet.png").await.unwrap();
+    let mut cat = Cat::new().await;
 
     let mut grass: Vec<Grass> = repeat_with(|| Grass::rand())
         .take(7000)
@@ -311,40 +283,9 @@ async fn main() {
             }
         }
 
-        draw_texture(
-            &cat_body_img,
-            engine_body.translation().x,
-            engine_body.translation().y,
-            WHITE,
-        );
 
-        draw_texture_ex(
-            &cat_tail_img,
-            engine_body.translation().x,
-            engine_body.translation().y + 1.0,
-            WHITE,
-            DrawTextureParams {
-                source: Some(cat_tail_anim.frame().source_rect),
-                dest_size: Some(cat_tail_anim.frame().dest_size),
-                ..Default::default()
-            }
-        );
-
-        draw_texture_ex(
-            &cat_feet_img,
-            engine_body.translation().x,
-            engine_body.translation().y + 11.0,
-            WHITE,
-            DrawTextureParams {
-                source: Some(cat_feet_anim.frame().source_rect),
-                dest_size: Some(cat_feet_anim.frame().dest_size),
-                ..Default::default()
-            }
-        );
-
-        // Update frame
-        cat_tail_anim.update();
-        cat_feet_anim.update();
+        cat.draw(engine_body.translation().x, engine_body.translation().y);
+        cat.update();
 
         set_default_camera();
         
