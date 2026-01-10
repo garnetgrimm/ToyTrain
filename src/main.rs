@@ -1,9 +1,15 @@
 use macroquad::prelude::*;
 use rapier2d::prelude::*;
 use macroquad_particles::{Emitter, EmitterConfig};
-use std::iter::repeat_with;
+
 mod cat;
+mod traits;
+mod grass;
+
 use cat::Cat;
+use grass::{GrassBuilder, GrassBlade};
+use traits::Drawable;
+
 
 pub struct Sprite {
     texture: Texture2D,
@@ -14,34 +20,6 @@ pub struct Engine {
     sprite: Sprite,
     smoke: Emitter,
 }
-
-pub struct Grass {
-    x: f32,
-    y: f32,
-    stiff: f32,
-    height: f32,
-    color: Color,
-}
-
-impl Grass {
-    fn rand() -> Self {
-        let mut color = YELLOW;
-        color.g = 0.7 + fastrand::f32() * 0.3;
-        Grass {
-            x: fastrand::i32(0..INTERNAL_WIDTH as i32) as f32,
-            y: fastrand::i32(0..INTERNAL_HEIGHT as i32) as f32,
-            height: fastrand::i32(3..10) as f32,
-            stiff: fastrand::f32(),
-            color: color,
-        }
-    }
-
-    fn draw(&self) {
-        let xoff: f32 = (get_time() as f32 + self.x).sin() * (1.0-self.stiff)*3.0;
-        draw_line(self.x, self.y, self.x + xoff, self.y - self.height, 2.0, self.color);
-    }
-}
-
 
 const INTERNAL_WIDTH: u32 = 160;
 const INTERNAL_HEIGHT: u32 = 75;
@@ -122,9 +100,11 @@ async fn main() {
 
     let mut cat = Cat::new().await;
 
-    let mut grass: Vec<Grass> = repeat_with(|| Grass::rand())
-        .take(7000)
-        .collect();
+    let grass_builder = GrassBuilder {
+        count: 32,
+        ..Default::default()
+    };
+    let mut grass: Vec<GrassBlade> = grass_builder.build();
 
     let ground_collider = ColliderBuilder::cuboid(100.0, 10.0) // half-extents
         .friction(0.5)
@@ -259,13 +239,8 @@ async fn main() {
         camera.target.x = engine_body.translation().x.round();
         camera.target.y = engine_body.translation().y.round();
 
-        let blade_thresh = INTERNAL_HEIGHT as f32 / 2.0 + 10.0;
-
-        for blade in &grass {
-            if 50.0 <= blade.y && blade.y <= blade_thresh {
-                blade.draw()
-            }
-        }
+        cat.x = engine_body.translation().x;
+        cat.y = engine_body.translation().y;
 
         for i in 0..10 {
             draw_texture(&track_texture, (i*32) as f32, 0.0, WHITE);
@@ -277,14 +252,14 @@ async fn main() {
             draw_car(&car, &rigid_body_set[car.handle]);
         }
 
-        for blade in &grass {
-            if blade.y > blade_thresh && blade.y < (2.0*blade_thresh - 50.0) {
-                blade.draw()
-            }
-        }
 
+        let mut items_to_draw = Vec::<&dyn Drawable>::new();
+        grass.iter().for_each(|blade| items_to_draw.push(blade));
+        items_to_draw.push(&cat);
+        items_to_draw.sort_by(|a, b| a.get_position().1.partial_cmp(&b.get_position().1).unwrap());
 
-        cat.draw(engine_body.translation().x, engine_body.translation().y);
+        items_to_draw.iter().for_each(|item| item.draw());
+
         cat.update();
 
         set_default_camera();

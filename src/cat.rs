@@ -1,7 +1,10 @@
 use macroquad::prelude::*;
 use macroquad::experimental::animation::*;
+use crate::traits::Drawable;
 
 pub struct Cat {
+    pub x: f32,
+    pub y: f32,
     pub tail_anim: AnimatedSprite,
     pub feet_anim: AnimatedSprite,
     pub tail_img: Texture2D,
@@ -37,6 +40,8 @@ impl Cat {
         let body_img = load_texture("src/cat_body.png").await.unwrap();
         let feet_img = load_texture("src/cat_feet.png").await.unwrap();
         Self {
+            x: 0.0,
+            y: 0.0,
             tail_anim,
             feet_anim,
             tail_img,
@@ -45,17 +50,24 @@ impl Cat {
         }
     }
 
-    pub fn draw(&mut self, x: f32, y: f32) {
+    pub fn update(&mut self) {
+        self.tail_anim.update();
+        self.feet_anim.update();
+    }
+}
+
+impl Drawable for Cat {
+    fn draw(&self) {
         draw_texture(
             &self.body_img,
-            x,
-            y,
+            self.x,
+            self.y,
             WHITE,
         );
         draw_texture_ex(
             &self.tail_img,
-            x,
-            y + 1.0,
+            self.x,
+            self.y + 1.0,
             WHITE,
             DrawTextureParams {
                 source: Some(self.tail_anim.frame().source_rect),
@@ -65,8 +77,8 @@ impl Cat {
         );
         draw_texture_ex(
             &self.feet_img,
-            x,
-            y + 11.0,
+            self.x,
+            self.y + 11.0,
             WHITE,
             DrawTextureParams {
                 source: Some(self.feet_anim.frame().source_rect),
@@ -76,8 +88,7 @@ impl Cat {
         );
     }
 
-    pub fn update(&mut self) {
-        self.tail_anim.update();
-        self.feet_anim.update();
+    fn get_position(&self) -> (f32, f32) {
+        (self.x, self.y)
     }
 }
