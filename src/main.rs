@@ -1,95 +1,18 @@
 use macroquad::prelude::*;
+use ::rand::rand_core::le;
 use rapier2d::prelude::*;
-use macroquad_particles::{Emitter, EmitterConfig};
 
 mod cat;
 mod traits;
 mod grass;
+mod engine;
 
 use cat::Cat;
 use grass::{GrassBuilder, GrassBlade};
 use traits::Drawable;
 
-
-pub struct Sprite {
-    texture: Texture2D,
-    handle: RigidBodyHandle,
-}
-
-pub struct Engine {
-    sprite: Sprite,
-    smoke: Emitter,
-}
-
 const INTERNAL_WIDTH: u32 = 160;
 const INTERNAL_HEIGHT: u32 = 75;
-
-impl Sprite {
-    async fn load(path: &str, position: Vec2, rigid_body_set: &mut RigidBodySet, collider_set: &mut ColliderSet) -> Sprite {
-        let texture = load_texture(path).await.expect("Failed to load texture");
-
-        let collider = ColliderBuilder::cuboid(texture.width() / 2.0, texture.height() / 2.0)
-            .friction(0.5)
-            .mass(100.0)
-            .restitution(0.0)
-            .build();
-
-        let body = RigidBodyBuilder::dynamic() 
-            .translation(vector![position.x, position.y])
-            .build();
-
-        let handle = rigid_body_set.insert(body);
-
-        collider_set.insert_with_parent(collider, handle, rigid_body_set);
-
-        Sprite {
-            handle: handle,
-            texture: texture
-        }
-    }
-}
-
-fn draw_engine(engine: &mut Engine, body: &RigidBody) {
-    let train_y = body.translation().y.round();
-    let train_x = body.translation().x.round();
-
-    engine.smoke.draw(vec2(train_x + 45.0, train_y));
-
-    draw_texture_ex(
-        &engine.sprite.texture,
-        train_x,
-        train_y,
-        WHITE,
-        DrawTextureParams {
-            rotation: body.rotation().angle(),
-            ..Default::default()
-        }
-    );
-
-    let wheel_phase = -body.translation().x as f32;
-
-    draw_line(
-        train_x + 15.0 + (wheel_phase).sin() * 3.0,
-        train_y + 25.0 + (wheel_phase).cos() * 3.0,
-        train_x + 35.0,
-        train_y + 25.0,
-        1.0,
-        Color::from_hex(0x896e2f),
-    );
-}
-
-fn draw_car(car: &Sprite, body: &RigidBody) {
-    draw_texture_ex(
-        &car.texture,
-        body.translation().x.round(),
-        body.translation().y.round(),
-        WHITE,
-        DrawTextureParams {
-            rotation: body.angvel(),
-            ..Default::default()
-        }
-    );
-}
 
 #[macroquad::main("Simple Sprite Example")]
 async fn main() {    
@@ -97,14 +20,18 @@ async fn main() {
     let mut rigid_body_set = RigidBodySet::new();
     let mut collider_set = ColliderSet::new();
 
-
-    let mut cat = Cat::new().await;
-
     let grass_builder = GrassBuilder {
         count: 32,
         ..Default::default()
     };
     let mut grass: Vec<GrassBlade> = grass_builder.build();
+    let mut cat = Cat::new().await;
+    let mut engine = engine::Engine::new().await;
+
+    let engine_collider = engine.make_collider();
+    let engine_body = RigidBodyBuilder::dynamic().translation(vector![0.0, -45.0]).build();
+    let engine_handle = rigid_body_set.insert(engine_body);
+    collider_set.insert_with_parent(engine_collider, engine_handle, &mut rigid_body_set);
 
     let ground_collider = ColliderBuilder::cuboid(100.0, 10.0) // half-extents
         .friction(0.5)
@@ -113,43 +40,7 @@ async fn main() {
     ground_collider.translation().x;
     collider_set.insert(ground_collider);
 
-    let engine_sprite = Sprite::load(
-        "src/engine.png",
-        vec2(0.0, -20.0),
-        &mut rigid_body_set,
-        &mut collider_set,
-    ).await;
-
-    let smoke_texture = load_texture("src/steam.png").await.expect("Failed to load particle texture");
-
     let track_texture = load_texture("src/tracks.png").await.expect("Failed to load track texture");
-
-    let smoke_emitter = Emitter::new(EmitterConfig {
-        emitting: true,
-        one_shot: false,
-        lifetime: 2.0,
-        initial_velocity: 30.0,
-        initial_velocity_randomness: 0.8,
-        initial_direction_spread: 0.8,
-        texture: Some(smoke_texture),
-        ..Default::default()
-    });
-
-    let mut engine = Engine {
-        sprite: engine_sprite,
-        smoke: smoke_emitter,
-    };
-
-    let mut cars = Vec::<Sprite>::new();
-
-    for i in 0..3 {
-        cars.push(Sprite::load(
-            "src/car.png",
-            vec2(90.0 + i as f32 * 70.0, 30.0),
-            &mut rigid_body_set,
-            &mut collider_set,
-        ).await);
-    }
 
     let gravity = vector![0.0, 9.81];
     let mut physics_pipeline = PhysicsPipeline::new();
@@ -204,15 +95,14 @@ async fn main() {
         }
 
         {
-            let engine_body = rigid_body_set.get_mut(engine.sprite.handle).unwrap();
+            let engine_body = rigid_body_set.get_mut(engine_handle).unwrap();
             engine_body.apply_impulse(impulse_vector, true);
-            engine.smoke.config.amount = engine_body.linvel().x.abs() as u32 / 5;
+            engine.set_smoke(engine_body.linvel().x.abs() as f32 / 5.0);
         }
-
 
         clear_background(Color::from_hex(0x896e2f));
 
-        let engine_body = &rigid_body_set[engine.sprite.handle];
+        let engine_body = &rigid_body_set[engine_handle];
         let num_sky_shades: i32 = 5;
         for i in 0..num_sky_shades {
             let mut color = Color::from_hex(0x27c1e9);
@@ -236,29 +126,25 @@ async fn main() {
             }
         }
 
-        camera.target.x = engine_body.translation().x.round();
+        camera.target.x = engine_body.translation().x.round() + engine.img.width() / 2.0;
         camera.target.y = engine_body.translation().y.round();
 
-        cat.x = engine_body.translation().x;
-        cat.y = engine_body.translation().y;
+        engine.x = engine_body.translation().x;
+        engine.y = engine_body.translation().y;
+        engine.rotation = engine_body.rotation().angle();
 
         for i in 0..10 {
             draw_texture(&track_texture, (i*32) as f32, 0.0, WHITE);
         }
 
-        draw_engine(&mut engine, engine_body);
-
-        for car in &cars {
-            draw_car(&car, &rigid_body_set[car.handle]);
-        }
-
-
         let mut items_to_draw = Vec::<&dyn Drawable>::new();
         grass.iter().for_each(|blade| items_to_draw.push(blade));
         items_to_draw.push(&cat);
+        items_to_draw.push(&engine);
         items_to_draw.sort_by(|a, b| a.get_position().1.partial_cmp(&b.get_position().1).unwrap());
 
         items_to_draw.iter().for_each(|item| item.draw());
+        engine.smoke.draw(vec2(engine.x + 45.0, engine.y));
 
         cat.update();
 
