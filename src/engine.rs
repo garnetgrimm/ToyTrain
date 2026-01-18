@@ -1,7 +1,9 @@
-use macroquad::prelude::{Color, WHITE, draw_texture_ex, DrawTextureParams, vec2, draw_line, Texture2D, load_texture};
-use rapier2d::prelude::{Collider, ColliderBuilder};
+use macroquad::prelude::{DrawTextureParams, Color, WHITE, draw_texture, draw_line, Texture2D, load_texture};
+use rapier2d::prelude::{Collider, ColliderBuilder, vector, nalgebra};
 use macroquad_particles::{Emitter, EmitterConfig};
 use crate::traits::Drawable;
+use crate::camscale::CamScale;
+
 pub struct Engine {
     pub x: f32,
     pub y: f32,
@@ -13,7 +15,7 @@ pub struct Engine {
 impl Engine {
     pub async fn new() -> Self {
         let img: Texture2D = load_texture("src/engine.png").await.unwrap();
-        let smoke_texture = load_texture("src/steam.png").await.expect("Failed to load particle texture");
+        let smoke_texture = load_texture("src/steam.png").await.unwrap();
 
         let smoke = Emitter::new(EmitterConfig {
             emitting: true,
@@ -37,6 +39,7 @@ impl Engine {
 
     pub fn make_collider(&self) -> Collider {
         ColliderBuilder::cuboid(self.img.width() / 2.0, self.img.height() / 2.0)
+            .translation(vector![0.0, -100.0])
             .friction(0.5)
             .mass(100.0)
             .restitution(0.0)
@@ -50,30 +53,37 @@ impl Engine {
 
 impl Drawable for Engine {
     fn draw(&self) {
-        draw_texture_ex(
+        let mut cam_scale = CamScale::new(2.0);
+        cam_scale.activate();
+
+        draw_texture(
             &self.img,
-            self.x,
-            self.y,
+            0.0,
+            0.0,
             WHITE,
-            DrawTextureParams {
-                rotation: self.rotation,
-                ..Default::default()
-            }
         );
 
         let wheel_phase = -self.x as f32;
 
         draw_line(
-            self.x + 15.0 + (wheel_phase).sin() * 3.0,
-            self.y + 25.0 + (wheel_phase).cos() * 3.0,
-            self.x + 35.0,
-            self.y + 25.0,
+            15.0 + (wheel_phase).sin() * 3.0,
+            25.0 + (wheel_phase).cos() * 3.0,
+            35.0,
+            25.0,
             1.0,
             Color::from_hex(0x896e2f),
         );
+
+        cam_scale.render(
+            self.x,
+            self.y,
+            Some(DrawTextureParams {
+                rotation: self.rotation,
+                ..Default::default()
+            }));
     }
 
     fn get_position(&self) -> (f32, f32) {
-        (0.0, 0.0)
+        (self.x, self.y)
     }
 }

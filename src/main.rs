@@ -2,13 +2,16 @@ use macroquad::prelude::*;
 use ::rand::rand_core::le;
 use rapier2d::prelude::*;
 
+mod camscale;
 mod cat;
 mod traits;
 mod grass;
 mod engine;
+mod track;
 
 use cat::Cat;
 use grass::{GrassBuilder, GrassBlade};
+use track::Track;
 use traits::Drawable;
 
 const INTERNAL_WIDTH: u32 = 160;
@@ -27,20 +30,15 @@ async fn main() {
     let mut grass: Vec<GrassBlade> = grass_builder.build();
     let mut cat = Cat::new().await;
     let mut engine = engine::Engine::new().await;
+    let tracks = track::Track::new(3).await;
 
     let engine_collider = engine.make_collider();
     let engine_body = RigidBodyBuilder::dynamic().translation(vector![0.0, -45.0]).build();
     let engine_handle = rigid_body_set.insert(engine_body);
     collider_set.insert_with_parent(engine_collider, engine_handle, &mut rigid_body_set);
 
-    let ground_collider = ColliderBuilder::cuboid(100.0, 10.0) // half-extents
-        .friction(0.5)
-        .translation(vector![0.0, 0.0])
-        .build();
-    ground_collider.translation().x;
+    let ground_collider = tracks.make_collider();
     collider_set.insert(ground_collider);
-
-    let track_texture = load_texture("src/tracks.png").await.expect("Failed to load track texture");
 
     let gravity = vector![0.0, 9.81];
     let mut physics_pipeline = PhysicsPipeline::new();
@@ -55,17 +53,6 @@ async fn main() {
     let event_handler = ();
 
     let font = load_ttf_font_from_bytes(include_bytes!("Pixel-Western.ttf")).unwrap();
-
-    let render_target = render_target(INTERNAL_WIDTH, INTERNAL_HEIGHT);
-    render_target.texture.set_filter(FilterMode::Nearest);
-
-    let mut camera = Camera2D {
-        render_target: Some(render_target.clone()),
-        zoom: vec2(1.0 / INTERNAL_WIDTH as f32 * 2.0, 1.0 / INTERNAL_HEIGHT as f32 * 2.0),
-        target: vec2(INTERNAL_WIDTH as f32 / 2.0, INTERNAL_HEIGHT as f32 / 2.0),
-        ..Default::default()
-    };
-
 
     loop {
         physics_pipeline.step(
@@ -83,9 +70,6 @@ async fn main() {
             &event_handler,
         );
 
-
-        set_camera(&camera);
-
         let mut impulse_vector = vector![0.0, 0.0];
         if is_key_down(KeyCode::Right) {
             impulse_vector.x += 100.0;
@@ -100,22 +84,7 @@ async fn main() {
             engine.set_smoke(engine_body.linvel().x.abs() as f32 / 5.0);
         }
 
-        clear_background(Color::from_hex(0x896e2f));
-
         let engine_body = &rigid_body_set[engine_handle];
-        let num_sky_shades: i32 = 5;
-        for i in 0..num_sky_shades {
-            let mut color = Color::from_hex(0x27c1e9);
-            let perc = i as f32 / num_sky_shades as f32;
-            color.r += perc;
-            draw_rectangle(
-                engine_body.translation().x - INTERNAL_WIDTH as f32 / 2.0,
-                0.0 - perc * (INTERNAL_HEIGHT as f32),
-                INTERNAL_WIDTH as f32,
-                20.0,
-                color,
-            );
-        }
 
         for blade in &mut grass {
             if blade.x + INTERNAL_WIDTH as f32 / 2.0 < engine_body.translation().x {
@@ -126,6 +95,18 @@ async fn main() {
             }
         }
 
+        let render_target = render_target(INTERNAL_WIDTH, INTERNAL_HEIGHT);
+        render_target.texture.set_filter(FilterMode::Nearest);
+
+        let mut camera = Camera2D {
+            render_target: Some(render_target.clone()),
+            zoom: vec2(1.0 / INTERNAL_WIDTH as f32 * 2.0, 1.0 / INTERNAL_HEIGHT as f32 * 2.0),
+            target: vec2(INTERNAL_WIDTH as f32 / 2.0, INTERNAL_HEIGHT as f32 / 2.0),
+            ..Default::default()
+        };
+
+        set_camera(&camera);
+
         camera.target.x = engine_body.translation().x.round() + engine.img.width() / 2.0;
         camera.target.y = engine_body.translation().y.round();
 
@@ -133,14 +114,10 @@ async fn main() {
         engine.y = engine_body.translation().y;
         engine.rotation = engine_body.rotation().angle();
 
-        for i in 0..10 {
-            draw_texture(&track_texture, (i*32) as f32, 0.0, WHITE);
-        }
-
         let mut items_to_draw = Vec::<&dyn Drawable>::new();
         grass.iter().for_each(|blade| items_to_draw.push(blade));
         items_to_draw.push(&cat);
-        items_to_draw.push(&engine);
+        // items_to_draw.push(&engine);
         items_to_draw.sort_by(|a, b| a.get_position().1.partial_cmp(&b.get_position().1).unwrap());
 
         items_to_draw.iter().for_each(|item| item.draw());
@@ -150,8 +127,26 @@ async fn main() {
 
         set_default_camera();
         
-        clear_background(BLUE);
+        clear_background(Color::from_hex(0x896e2f));
 
+        let num_sky_shades: i32 = 5;
+        let sky_height = screen_height() / 2.0;
+        for i in 0..num_sky_shades {
+            let mut color = Color::from_hex(0x27c1e9);
+            let perc = i as f32 / num_sky_shades as f32;
+            color.r += perc;
+            draw_rectangle(
+                0.0,
+                perc * sky_height,
+                screen_width(),
+                sky_height / num_sky_shades as f32,
+                color,
+            );
+        }
+
+        tracks.draw();
+        engine.draw();
+        
         // Draw the low-resolution render target texture onto the full screen, scaled up.
         // Because its filter mode is Nearest, it will look pixelated.
         draw_texture_ex(
